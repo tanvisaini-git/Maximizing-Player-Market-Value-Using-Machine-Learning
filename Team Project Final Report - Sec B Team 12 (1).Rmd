@@ -1,0 +1,826 @@
+```{r}
+library(ggplot2)
+library(carData)
+library(car)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(randomForest)
+library(caret)
+library(glmnet)
+library(Metrics)
+player_data <- read_excel("C:/Users/mikes/Downloads/final_dataset.xlsx")
+```
+
+```{r}
+names(player_data) <- gsub(" ", "", names(player_data))
+```
+
+
+```{r}
+#Time Decay Weighted Average
+# Weights for the time decay calculation
+weights <- c(0.5, 0.25, 0.15, 0.1)
+
+# Function to calculate weighted averages
+calculate_weighted_average <- function(...){
+  values <- c(...)
+  non_na_values <- !is.na(values)
+  if (all(is.na(values))){ 
+    return(NA)  # Return NA if all values are NA
+  }
+  
+  adjusted_weights <- weights[non_na_values]
+  adjusted_values <- values[non_na_values]
+  
+  # Calculate the weighted sum and adjust the denominator based on the available weights
+  weighted_values <- adjusted_values * adjusted_weights
+  return(sum(weighted_values) / sum(adjusted_weights))
+}
+```
+
+
+
+```{r}
+for (stat in c("MP", "Starts", "Min", "TotalMins/90", "Gls", "Ast", 
+  "Non-PenaltyGoals", "PenaltiesScored", "PenaltiesAttempted", "YellowCards", 
+  "RedCards", "Gls/90", "Ast/90", "GandA/90", "Non-PenaltyGoals/90", 
+  "GlsandAst-ScoredPenalties/90", "xG", "Non-PenaltyxG", "xA", 
+  "Non-penaltyxGandxA", "xG/90", "xA/90", "xGandxA/90", "Non-PenaltyxG/90", 
+  "Non-PenaltyxGandxA/90", "TotalShots", "TotalShotsonTarget", 
+  "ShotsonTarget%", "Shots/90", "ShotsonTarget/90", "Goals/Shots", 
+  "Goals/ShotsonTarget", "AvgShotDistance-yds", "FreekickShots", 
+  "Non-PenaltyxG/Shots", "GoalsScoredminusxG", 
+  "Non-PenaltyGoalsScoredminusNon-PenaltyxG", "Shot-CreatingActions", 
+  "Shot-CreatingActions/90", "PassesLeadingtoShotAttempt", 
+  "Set-PieceLeadingtoShotAttempt", "DribblesLeadingtoShotAttempt", 
+  "ShotsLeadingtoShotAttempt", "FoulsDrawnLeadingtoShotAttempt", 
+  "DefensiveActionsLeadingtoShotAttempt", "GoalCreatingActions", 
+  "GoalCreatingActions/90", "PassesLeadingtoGoals", 
+  "Set-PieceLeadingtoGoals", "DribblesLeadingtoGoals", 
+  "ShotsLeadingtoGoals", "FoulsDrawnLeadingtoGoals", 
+  "DefensiveActionsLeadingtoGoals", "Touches", 
+  "TouchesinDefensivePenaltyBox", "TouchesinDefensive3rd", 
+  "TouchesinMidfield3rd", "TouchesinAttacking3rd", 
+  "TouchesinAttackingPenaltyBox", "TouchesinOpen-play", 
+  "TotalSuccessfulDribbles", "TotalAttemptedDribbles", 
+  "DribbleSuccess%", "Totalno.ofPlayersDribblesPast", 
+  "TotalNutmegs", "TotalCarries", "TotalDistanceCarriedtheBall", 
+  "TotalDistanceCarriedtheBallinForwardDirection", 
+  "TotalCarriesinForwardDirection", "CarriesintoFinalThird", 
+  "CarriesintoAttackingPenaltyBox", "TotalFailedAttemptsatControllingBall", 
+  "NumberofTimesTackledwhenDribbling", 
+  "NumberofTimesPlayerwasPassTarget", "NumberofTimesReceivedPass", 
+  "%ofTimesSuccessfullyReceivedPass", "ProgressivePassesReceived", 
+  "PassesCompleted-Allpass-types", "PassesAttempted-Allpass-types", 
+  "PassCompletion%-Allpass-types", "TotalDistanceofCompletedPasses-AllPass-types", 
+  "TotalDistanceofCompletedProgressivePasses-AllPass-types", 
+  "PassesCompleted-ShortPasses", "PassesAttempted-ShortPasses", 
+  "PassCompletion%-ShortPasses", "PassesCompleted-MediumPasses", 
+  "PassesAttempted-MediumPasses", "PassCompletion%-MediumPasses", 
+  "PassesCompleted-LongPasses", "PassesAttempted-LongPasses", 
+  "PassCompletion%-LongPasses", "TotalAssists", "xGAssisted", 
+  "AssistminusxGAssisted", "CompletedpassesthatenterFinal3rd", 
+  "CompletedpassesthatenterPenaltyBox", 
+  "CompletedCrossesthatenterPenaltyBox", "TotalCompletedProgressivePasses", 
+  "TotalNumberofPlayersTackled", "TotalTacklesWon", 
+  "TacklesinDefensive3rd", "TacklesinMidfield3rd", "TacklesinAttacking3rd", 
+  "NumberofDribblersTackled", "TimesDribbledPastandTotalTackles", 
+  "%ofDribblersTackled", "NumberofTimesDribbledPast", 
+  "NumberofPressingActions", "TimesSquadgainedPossessionwithin5secondsofPressingActions", 
+  "SuccessfulPressure%", "NumberofPressesinDefensiveThird", 
+  "NumberofPressesinMidfieldThird", "NumberofPressesinAttackingThird", 
+  "TotalDefensiveBlocks", "TotalShotsBlocked", "GoalSavingBlocks", 
+  "TimesblockedaPass", "TotalInterceptions", 
+  "TotalPlayersTackledandTotalInterceptions", "TotalClearances", 
+  "MistakesleadingtoOpponentShots", "2ndYellowCards", "FoulsCommitted", 
+  "FoulsDrawn", "Offsides", "Crosses", "Interceptions", 
+  "PenaltyKicksWon", "PenaltiesConceded", "OwnGoals", 
+  "TotalLooseBallsRecovered", "AerialDuelWon", "AerialDuelLost", 
+  "%AerialDuelsWon")) {  # List of stats to calculate
+  # Create a new column for weighted average
+  
+  stat_columns <- grep(paste0("^", stat, "\\("), names(player_data), value = TRUE)
+  player_data[[paste0(stat, "_Weighted_Avg")]] <- apply(
+    player_data[, stat_columns], 
+    1, 
+    calculate_weighted_average
+  )
+}
+```
+
+
+```{r}
+player_data <- player_data %>%
+  mutate(`ShotsonTarget%_Weighted_Avg` = ifelse(is.na(`ShotsonTarget%_Weighted_Avg`), 0, `ShotsonTarget%_Weighted_Avg`)) %>%
+  mutate(`Goals/Shots_Weighted_Avg` = ifelse(is.na(`Goals/Shots_Weighted_Avg`), 0, `Goals/Shots_Weighted_Avg`)) %>%
+  mutate(`Goals/ShotsonTarget_Weighted_Avg` = ifelse(is.na(`Goals/ShotsonTarget_Weighted_Avg`), 0, `Goals/ShotsonTarget_Weighted_Avg`)) %>%
+  mutate(`AvgShotDistance-yds_Weighted_Avg` = ifelse(is.na(`AvgShotDistance-yds_Weighted_Avg`), 0, `AvgShotDistance-yds_Weighted_Avg`)) %>%
+  mutate(`Non-PenaltyxG/Shots_Weighted_Avg` = ifelse(is.na(`Non-PenaltyxG/Shots_Weighted_Avg`), 0, `Non-PenaltyxG/Shots_Weighted_Avg`)) %>%
+  mutate(`DribbleSuccess%_Weighted_Avg` = ifelse(is.na(`DribbleSuccess%_Weighted_Avg`), 0, `DribbleSuccess%_Weighted_Avg`)) %>%
+  mutate(`%ofTimesSuccessfullyReceivedPass_Weighted_Avg` = ifelse(is.na(`%ofTimesSuccessfullyReceivedPass_Weighted_Avg`), 0, `%ofTimesSuccessfullyReceivedPass_Weighted_Avg`)) %>%
+  mutate(`PassCompletion%-Allpass-types_Weighted_Avg` = ifelse(is.na(`PassCompletion%-Allpass-types_Weighted_Avg`), 0, `PassCompletion%-Allpass-types_Weighted_Avg`)) %>%
+  mutate(`PassCompletion%-ShortPasses_Weighted_Avg` = ifelse(is.na(`PassCompletion%-ShortPasses_Weighted_Avg`), 0, `PassCompletion%-ShortPasses_Weighted_Avg`)) %>%
+  mutate(`PassCompletion%-MediumPasses_Weighted_Avg` = ifelse(is.na(`PassCompletion%-MediumPasses_Weighted_Avg`), 0, `PassCompletion%-MediumPasses_Weighted_Avg`)) %>%
+  mutate(`PassCompletion%-LongPasses_Weighted_Avg` = ifelse(is.na(`PassCompletion%-LongPasses_Weighted_Avg`), 0, `PassCompletion%-LongPasses_Weighted_Avg`)) %>%
+  mutate(`%ofDribblersTackled_Weighted_Avg` = ifelse(is.na(`%ofDribblersTackled_Weighted_Avg`), 0, `%ofDribblersTackled_Weighted_Avg`)) %>%
+  mutate(`2ndYellowCards_Weighted_Avg` = ifelse(is.na(`2ndYellowCards_Weighted_Avg`), 0, `2ndYellowCards_Weighted_Avg`)) %>%
+  mutate(`Offsides_Weighted_Avg` = ifelse(is.na(`Offsides_Weighted_Avg`), 0, `Offsides_Weighted_Avg`)) %>%
+  mutate(`SuccessfulPressure%_Weighted_Avg` = ifelse(is.na(`SuccessfulPressure%_Weighted_Avg`), 0, `SuccessfulPressure%_Weighted_Avg`)) %>%
+  mutate(`OwnGoals_Weighted_Avg` = ifelse(is.na(`OwnGoals_Weighted_Avg`), 0, `OwnGoals_Weighted_Avg`)) %>%
+  mutate(`%AerialDuelsWon_Weighted_Avg` = ifelse(is.na(`%AerialDuelsWon_Weighted_Avg`), 0, `%AerialDuelsWon_Weighted_Avg`)) %>%
+  mutate(`FoulsDrawn_Weighted_Avg` = ifelse(is.na(`FoulsDrawn_Weighted_Avg`), 0, `FoulsDrawn_Weighted_Avg`)) 
+
+player_data <- player_data %>%
+  mutate(ContractYearsLeft = ifelse(ContractYearsLeft == "fail", 0, ContractYearsLeft)) %>%
+  mutate(ContractYearsLeft = as.integer(ContractYearsLeft))
+
+player_data <- player_data %>%
+  group_by(Player, 'Squad(20/21)') %>%                       
+  arrange(desc(Age), 'Contract Years Left') %>%        
+  slice(1) %>%                                     
+  ungroup()            
+
+
+cleaned_player_data <- player_data[, c(1:8, 549:ncol(player_data))]
+sum(is.na(cleaned_player_data))
+
+#write.csv(cleaned_player_data, "C:/Users/mikes/Downloads/cleaned_player_data.csv", row.names = FALSE)
+#convert position into int
+position_mapping <- c("Goalkeeper" = 0, "Defender" = 1, "midfield" = 2, "attack" = 3)
+cleaned_player_data <- cleaned_player_data %>%
+  mutate(Position = as.integer(position_mapping[Position]))
+
+```
+
+```{r}
+library(factoextra)
+player_data_dummies <- as.data.frame(model.matrix(~ Club + Nation + League - 1, data = cleaned_player_data))
+
+# Convert the resulting matrix back to a dataframe
+player_data_dummies <- as.data.frame(lapply(player_data_dummies, function(x) as.numeric(as.character(x))))
+
+
+cleaned_player_data <- cbind(cleaned_player_data[, !(names(cleaned_player_data) %in% c('Club', 'Nation', 'League'))], player_data_dummies) %>% 
+  select(-c(Player))
+
+goalkeepers <- cleaned_player_data %>% filter(Position == 0) %>% select(-c(Position))
+defenders <- cleaned_player_data %>% filter(Position == 1) %>% select(-c(Position))
+midfielders <- cleaned_player_data %>% filter(Position == 2) %>% select(-c(Position))
+attackers <- cleaned_player_data %>% filter(Position == 3) %>% select(-c(Position))
+
+
+```
+
+```{r}
+# Final cleaning for att
+# Find columns with only one unique value
+single_level_cols <- sapply(attackers, function(x) length(unique(x)) < 2)
+
+# Drop columns with only one level
+attackers <- attackers[, !single_level_cols]
+
+# Print those columns
+print(names(single_level_cols[single_level_cols == TRUE]))
+
+```
+
+
+```{r}
+# Set seed for reproducibility
+set.seed(255)
+
+# Define 10-fold cross-validation
+train_control <- trainControl(method = "cv", number = 10)
+
+# Train multiple linear regression model
+linear_model <- train(Value ~ ., data = attackers, method = "lm", trControl = train_control)
+
+# Get RMSE for Linear Regression
+linear_rmse <- linear_model$resample$RMSE
+print(paste("Linear Regression OOS RMSE:", mean(linear_rmse)))
+
+# Train Random Forest model
+rf_model <- train(Value ~ ., data = attackers, method = "rf", trControl = train_control)
+
+# Get RMSE for Random Forest
+rf_rmse <- rf_model$resample$RMSE
+print(paste("Random Forest OOS RMSE:", mean(rf_rmse)))
+
+# Prepare data for glmnet (Lasso)
+# Create model matrix and response variable
+x <- model.matrix(Value ~ ., data = attackers)[, -1]
+y <- attackers$Value
+
+# Define control for k-fold cross-validation
+control <- trainControl(method = "cv", number = 10)
+
+# Train Lasso regression model with cross-validation
+lasso_model_cv <- train(x, y, method = "glmnet", trControl = control, tuneLength = 10)
+
+# Display results
+print(lasso_model_cv)
+
+# Get best lambda value
+best_lambda <- lasso_model_cv$bestTune$lambda
+
+# Extract RMSE values for the best lambda across all folds
+best_model_rmse_values <- lasso_model_cv$results %>%
+  filter(lambda == best_lambda) %>%
+  select(RMSE) %>%
+  unlist()
+
+# Calculate the mean RMSE for the best lambda
+mean_rmse <- mean(best_model_rmse_values)
+print(paste("Lasso OOS RMSE for best lambda:", mean_rmse))
+
+# Extract coefficients for the best lambda
+lasso_coefs <- coef(lasso_model_cv$finalModel, s = best_lambda)
+
+# Convert to a data frame for easier viewing
+lasso_coefs_df <- data.frame(
+  Variable = rownames(as.matrix(lasso_coefs)),
+  Coefficient = as.vector(lasso_coefs)
+)
+
+# Sort by absolute value of coefficients in descending order
+sorted_lasso_coefs_df <- lasso_coefs_df[order(-abs(lasso_coefs_df$Coefficient)), ]
+
+# View the sorted coefficients
+print(sorted_lasso_coefs_df)
+
+
+
+BR_att <- attackers %>% filter(`ClubBrighton..amp..Hove.Albion` == 1) %>% select (-c(Value))
+BR_att2 <- player_data %>% filter(Position == 'attack') %>% filter(Club == 'Brighton &amp; Hove Albion')
+BR_pre <- predict(lasso_model_cv$finalModel, newx = as.matrix(BR_att), s = best_lambda)
+BR_pre
+
+
+
+#Attackers
+"Linear Regression OOS RMSE: 15165764.6619236"
+"Random Forest OOS RMSE: 11881900.1718606"
+"Lasso OOS RMSE: 8690387.43236209"
+```
+
+
+```{r}
+# Final cleaning for mid
+# Find columns with only one unique value
+single_level_cols <- sapply(midfielders, function(x) length(unique(x)) < 2)
+
+
+# Print those columns
+print(names(single_level_cols[single_level_cols == TRUE]))
+
+# Drop columns with only one level
+midfielders <- midfielders[, !single_level_cols]
+
+
+```
+
+```{r}
+# Train multiple linear regression model
+linear_model <- train(Value ~ ., data = midfielders, method = "lm", trControl = train_control)
+
+# Get RMSE for Linear Regression
+linear_rmse <- linear_model$resample$RMSE
+print(paste("Linear Regression OOS RMSE:", mean(linear_rmse)))
+
+# Train Random Forest model
+rf_model <- train(Value ~ ., data = midfielders, method = "rf", trControl = train_control)
+
+# Get RMSE for Random Forest
+rf_rmse <- rf_model$resample$RMSE
+print(paste("Random Forest OOS RMSE:", mean(rf_rmse)))
+
+# Prepare data for glmnet (Lasso)
+# Create model matrix and response variable
+x <- model.matrix(Value ~ ., data = midfielders)[, -1]
+y <- midfielders$Value
+
+# Define control for k-fold cross-validation
+control <- trainControl(method = "cv", number = 10)
+
+# Train Lasso regression model with cross-validation
+lasso_model_cv <- train(x, y, method = "glmnet", trControl = control, tuneLength = 10)
+
+# Display results
+print(lasso_model_cv)
+
+# Get best lambda value
+best_lambda <- lasso_model_cv$bestTune$lambda
+
+# Extract RMSE values for the best lambda across all folds
+best_model_rmse_values <- lasso_model_cv$results %>%
+  filter(lambda == best_lambda) %>%
+  select(RMSE) %>%
+  unlist()
+
+# Calculate the mean RMSE for the best lambda
+mean_rmse <- mean(best_model_rmse_values)
+print(paste("Lasso OOS RMSE for best lambda:", mean_rmse))
+
+# Extract coefficients for the best lambda
+lasso_coefs <- coef(lasso_model_cv$finalModel, s = best_lambda)
+
+# Convert to a data frame for easier viewing
+lasso_coefs_df <- data.frame(
+  Variable = rownames(as.matrix(lasso_coefs)),
+  Coefficient = as.vector(lasso_coefs)
+)
+
+# Sort by absolute value of coefficients in descending order
+sorted_lasso_coefs_df <- lasso_coefs_df[order(-abs(lasso_coefs_df$Coefficient)), ]
+
+# View the sorted coefficients
+print(sorted_lasso_coefs_df)
+
+#midfield
+```
+
+```{r}
+# Final cleaning for def
+# Find columns with only one unique value
+single_level_cols <- sapply(defenders, function(x) length(unique(x)) < 2)
+
+
+# Print those columns
+print(names(single_level_cols[single_level_cols == TRUE]))
+
+# Drop columns with only one level
+defenders <- defenders[, !single_level_cols]
+
+
+```
+
+```{r}
+# Train multiple linear regression model
+linear_model <- train(Value ~ ., data = defenders, method = "lm", trControl = train_control)
+
+# Get RMSE for Linear Regression
+linear_rmse <- linear_model$resample$RMSE
+print(paste("Linear Regression OOS RMSE:", mean(linear_rmse)))
+
+# Train Random Forest model
+rf_model <- train(Value ~ ., data = defenders, method = "rf", trControl = train_control)
+
+# Get RMSE for Random Forest
+rf_rmse <- rf_model$resample$RMSE
+print(paste("Random Forest OOS RMSE:", mean(rf_rmse)))
+
+importance_rf <- varImp(rf_model)
+
+# Print the importance of variables
+print(importance_rf)
+
+
+# Prepare data for glmnet (Lasso)
+# Create model matrix and response variable
+x <- model.matrix(Value ~ ., data = defenders)[, -1]
+y <- defenders$Value
+
+# Define control for k-fold cross-validation
+control <- trainControl(method = "cv", number = 10)
+
+# Train Lasso regression model with cross-validation
+lasso_model_cv <- train(x, y, method = "glmnet", trControl = control, tuneLength = 10)
+
+# Display results
+print(lasso_model_cv)
+
+# Get best lambda value
+best_lambda <- lasso_model_cv$bestTune$lambda
+
+# Extract RMSE values for the best lambda across all folds
+best_model_rmse_values <- lasso_model_cv$results %>%
+  filter(lambda == best_lambda) %>%
+  select(RMSE) %>%
+  unlist()
+
+# Calculate the mean RMSE for the best lambda
+mean_rmse <- mean(best_model_rmse_values)
+print(paste("Lasso OOS RMSE for best lambda:", mean_rmse))
+
+# Extract coefficients for the best lambda
+lasso_coefs <- coef(lasso_model_cv$finalModel, s = best_lambda)
+
+# Convert to a data frame for easier viewing
+lasso_coefs_df <- data.frame(
+  Variable = rownames(as.matrix(lasso_coefs)),
+  Coefficient = as.vector(lasso_coefs)
+)
+
+# Sort by absolute value of coefficients in descending order
+sorted_lasso_coefs_df <- lasso_coefs_df[order(-abs(lasso_coefs_df$Coefficient)), ]
+
+# View the sorted coefficients
+sorted_lasso_coefs_df
+
+
+MU_defenders <- defenders %>% filter(`ClubManchester.United` == 1) %>% select (-c(Value))
+MU_defenders2 <- player_data %>% filter(Position == 'Defender') %>% filter(Club == 'Manchester United')
+MU_defenders_pred <- predict(lasso_model_cv$finalModel, newx = as.matrix(MU_defenders), s = best_lambda)
+MU_defenders_pred
+
+#defenders
+"Linear Regression OOS RMSE: 8885992.54325978"
+"Random Forest OOS RMSE: 8484326.04867583"
+"Lasso OOS RMSE: 5955072.83128783"
+```
+
+
+
+```{r}
+# Create a data frame with the positions and their associated entries
+positions <- factor(c("Attackers", "Midfielders", "Defenders", "Goalkeepers"),
+                    levels = c("Attackers", "Midfielders", "Defenders", "Goalkeepers"))
+entries <- c(522, 593, 719, 197)
+data <- data.frame(Position = positions, Entries = entries)
+# Create the bar plot
+ggplot(data, aes(x = Position, y = Entries, fill = Position)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Player Records by Position",
+         x = "Position",
+         y = "Number of Entries") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set3") +
+    theme(legend.position = "none")
+
+
+positions <- factor(c("Attackers", "Midfielders", "Defenders"),
+                    levels = c("Attackers", "Midfielders", "Defenders"))
+entries <- c(522, 593, 719)
+data <- data.frame(Position = positions, Entries = entries)
+# Create the bar plot
+ggplot(data, aes(x = Position, y = Entries, fill = Position)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Player Records by Position",
+         x = "Position",
+         y = "Number of Entries") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set3") +
+    theme(legend.position = "none")
+
+
+
+
+# Load necessary libraries
+library(ggplot2)
+
+cleaned_player_data <- cleaned_player_data %>% 
+  filter(Position == 1 | Position == 2 | Position == 3) %>% select (-c(`"Squad(20/21)"`))
+# Perform PCA on your cleaned player data (assuming this step has already been done)
+pca_result <- prcomp(cleaned_player_data, scale. = TRUE)
+
+# Extract the first two principal components
+pc1 <- pca_result$x[, 1]
+pc2 <- pca_result$x[, 2]
+
+# Create a data frame with PCA results and player positions
+pca_data <- data.frame(PC1 = pc1, PC2 = pc2, Position = cleaned_player_data$Position)
+
+# Run K-Means clustering on the PCA results
+set.seed(123)  # Set seed for reproducibility
+kmeans_result <- kmeans(pca_data[, c("PC1", "PC2")], centers = 3)  # Adjust the number of centers as needed
+
+# Add the cluster assignment to your data frame
+pca_data$Cluster <- as.factor(kmeans_result$cluster)
+
+# Define custom colors for clusters
+custom_colors <- c("1" = "red", "2" = "blue", "3" = "green", "4" = "orange")
+
+# Plot the PCA results colored by k-means clusters
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 2) +  # Adjust size for better visibility
+  theme_minimal() +
+  scale_color_manual(values = custom_colors) +  # Use custom colors for clusters
+  labs(title = "PCA with K-Means Clustering of Player Data", x = "Principal Component 1", y = "Principal Component 2") +
+  theme(legend.title = element_blank())
+
+
+
+# Add a new column for the majority position in each cluster
+library(dplyr)
+
+# Assuming cleaned_player_data has a column for player positions
+pca_data <- pca_data %>%
+  group_by(Cluster) %>%
+  mutate(Majority_Position = names(sort(table(Position), decreasing = TRUE)[1])) %>%
+  ungroup()
+
+
+table(pca_data$Cluster, cleaned_player_data$Position)
+cluster_labels <- c("1" = "Attacker", 
+                    "2" = "Defender/Midfielder", 
+                    "3" = "Midfielder/Attacker")
+pca_data$Cluster <- as.factor(kmeans_result$cluster)
+levels(pca_data$Cluster) <- cluster_labels
+
+
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 2) +
+  theme_minimal() +
+  scale_color_manual(values = c("Midfielder/Attacker" = "blue", 
+                                 "Defender/Midfielder" = "orange", 
+                                 "Attacker" = "red",
+                                "Attacker/Goalkeeper")) +
+  labs(title = "PCA with K-Means Clustering of Player Data", 
+       x = "Principal Component 1", 
+       y = "Principal Component 2") +
+  theme(legend.title = element_blank())
+
+
+              
+```
+
+
+
+
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(cluster)
+
+# Dimensionality reduction using PCA
+pca <- prcomp(cleaned_player_data, scale = TRUE)
+reduced_data <- data.frame(pca$x[, 1:2])  # Using first two principal components
+
+
+# Within-Cluster Sum of Squares
+wcss <- vector()
+for (i in 1:15) {
+  kmeans_result <- kmeans(reduced_data, centers = i)
+  wcss[i] <- kmeans_result$tot.withinss
+}
+
+# Plotting the elbow plot
+plot(1:15, wcss, type = 'b', main = 'Elbow Method', xlab = 'Number of Clusters', ylab = 'WCSS')
+
+  # K-means clustering
+kmeans_result <- kmeans(reduced_data, centers = 3)
+reduced_data$cluster <- factor(kmeans_result$cluster)
+
+# Plotting
+ggplot(reduced_data, aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point() +
+  labs(title = 'K-means Clustering Visualization', x = 'Principal Component 1', y = 'Principal Component 2') +
+  theme_minimal()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###testing
+single_level_cols <- sapply(goalkeepers, function(x) length(unique(x)) < 2)
+
+
+# Print those columns
+print(names(single_level_cols[single_level_cols == TRUE]))
+
+# Drop columns with only one level
+goalkeepers <- goalkeepers[, !single_level_cols]
+# Get column names
+goalkeeper_column_names <- colnames(goalkeepers)
+
+non_zero_counts <- sapply(goalkeepers, function(col) sum(col != 0))
+
+# Filter to show only columns with non-zero counts
+result <- data.frame(Column = colnames(goalkeepers), NonZeroCount = non_zero_counts)
+result <- result[result$NonZeroCount > 0, ]
+
+# View the result
+print(result)
+goalkeepers2 <- goalkeepers %>% select(-c(Gls_Weighted_Avg, Ast_Weighted_Avg, `Non-PenaltyGoals_Weighted_Avg`,
+                                         PenaltiesScored_Weighted_Avg, PenaltiesAttempted_Weighted_Avg,
+                                         `Gls/90_Weighted_Avg`, `Ast/90_Weighted_Avg`, `GandA/90_Weighted_Avg`,
+                                         `Non-PenaltyGoals/90_Weighted_Avg`,
+                                         `GlsandAst-ScoredPenalties/90_Weighted_Avg`, `xG_Weighted_Avg`,
+                                         `Non-PenaltyxG_Weighted_Avg`, `xG/90_Weighted_Avg`,
+                                         `Non-PenaltyxG/90_Weighted_Avg`, `TotalShots_Weighted_Avg`,
+                                         `TotalShotsonTarget_Weighted_Avg`, `ShotsonTarget%_Weighted_Avg`, 
+                                         `Shots/90_Weighted_Avg`, `ShotsonTarget/90_Weighted_Avg`,
+                                         `Goals/Shots_Weighted_Avg`, `Goals/ShotsonTarget_Weighted_Avg`,
+                                         `AvgShotDistance-yds_Weighted_Avg`, `FreekickShots_Weighted_Avg`,
+                                         `Non-PenaltyxG/Shots_Weighted_Avg`, `GoalsScoredminusxG_Weighted_Avg`,
+                                         `Non-PenaltyGoalsScoredminusNon-PenaltyxG_Weighted_Avg`,
+                                         `ShotsLeadingtoShotAttempt_Weighted_Avg`,
+                                         `FoulsDrawnLeadingtoShotAttempt_Weighted_Avg`,
+                                         `Set-PieceLeadingtoGoals_Weighted_Avg`,
+                                         `TouchesinAttackingPenaltyBox_Weighted_Avg`, 
+                                         `TotalCarriesinForwardDirection_Weighted_Avg`,
+                                         `CarriesintoAttackingPenaltyBox_Weighted_Avg`,
+                                         `NumberofTimesTackledwhenDribbling_Weighted_Avg`,
+                                         `ProgressivePassesReceived_Weighted_Avg`, `TotalAssists_Weighted_Avg`,
+                                         `CompletedCrossesthatenterPenaltyBox_Weighted_Avg`,
+                                         `TotalNumberofPlayersTackled_Weighted_Avg`,
+                                         `TotalTacklesWon_Weighted_Avg`, TacklesinDefensive3rd_Weighted_Avg,
+                                         TacklesinMidfield3rd_Weighted_Avg,	NumberofDribblersTackled_Weighted_Avg,
+                                         `%ofDribblersTackled_Weighted_Avg`, NumberofPressesinMidfieldThird_Weighted_Avg,
+                                         NumberofPressesinAttackingThird_Weighted_Avg, TotalShotsBlocked_Weighted_Avg,
+                                         	TotalInterceptions_Weighted_Avg, 	TotalPlayersTackledandTotalInterceptions_Weighted_Avg,
+                                         `2ndYellowCards_Weighted_Avg`, 	Offsides_Weighted_Avg, Crosses_Weighted_Avg,
+                                         	Interceptions_Weighted_Avg, OwnGoals_Weighted_Avg, AerialDuelWon_Weighted_Avg,
+                                         	AerialDuelLost_Weighted_Avg, 	`%AerialDuelsWon_Weighted_Avg`, `RedCards_Weighted_Avg`,
+                                         `CarriesintoFinalThird_Weighted_Avg`
+                                         ))
+
+goalkeeper_column_names <- colnames(goalkeepers2)
+
+non_zero_counts <- sapply(goalkeepers2, function(col) sum(col != 0))
+
+# Filter to show only columns with non-zero counts
+result <- data.frame(Column = colnames(goalkeepers2), NonZeroCount = non_zero_counts)
+result <- result[result$NonZeroCount > 0, ]
+
+# View the result
+print(result)
+
+single_level_cols <- sapply(goalkeepers2, function(x) length(unique(x)) < 2)
+
+
+# Print those columns
+print(names(single_level_cols[single_level_cols == TRUE]))
+
+# Drop columns with only one level
+goalkeepers2 <- goalkeepers2[, !single_level_cols]
+
+# Train multiple linear regression model
+linear_model <- train(Value ~ ., data = goalkeepers2, method = "lm", trControl = train_control)
+
+# Get RMSE for Linear Regression
+linear_rmse <- linear_model$resample$RMSE
+print(paste("Linear Regression OOS RMSE:", mean(linear_rmse)))
+
+# Train Random Forest model
+rf_model <- train(Value ~ ., data = goalkeepers2, method = "rf", trControl = train_control)
+
+# Get RMSE for Random Forest
+rf_rmse <- rf_model$resample$RMSE
+print(paste("Random Forest OOS RMSE:", mean(rf_rmse)))
+
+# Prepare data for glmnet (Lasso)
+x <- model.matrix(Value ~ ., data = goalkeepers2)[, -1]
+y <- goalkeepers2$Value
+
+# Define Lasso model with cross-validation
+lasso_model <- cv.glmnet(x, y, alpha = 1, nfolds = 10)
+
+# Best lambda
+best_lambda <- lasso_model$lambda.min
+
+# Train final Lasso model with best lambda
+lasso_final <- glmnet(x, y, alpha = 1, lambda = best_lambda)
+
+# Predict with Lasso model
+lasso_predictions <- predict(lasso_final, newx = x)
+
+# Calculate RMSE for Lasso model
+lasso_rmse <- sqrt(mean((y - lasso_predictions)^2))
+print(paste("Lasso OOS RMSE:", lasso_rmse))
+
+# Extract the coefficients
+lasso_coefs <- coef(lasso_final)
+
+# Convert to a data frame for easier viewing
+lasso_coefs_df <- data.frame(
+  Variable = rownames(as.matrix(lasso_coefs)),
+  Coefficient = as.vector(lasso_coefs)
+)
+
+# Sort by descending order of coefficients
+sorted_lasso_coefs_df <- lasso_coefs_df[order(-abs(lasso_coefs_df$Coefficient)), ]
+
+print(sorted_lasso_coefs_df)
+
+MU_gk_2 <- goalkeepers2 %>% filter(`ClubManchester.United` == 1) %>% select (-c(Value))
+MU_gk2 <- player_data %>% filter(Position == 'Goalkeeper') %>% filter(Club == 'Manchester United')
+MU_gk_pred <- predict(lasso_final, newx = as.matrix(MU_gk_2))
+MU_gk_pred
+
+
+#goalkeeper
+"Linear Regression OOS RMSE: 1370335725.00757"
+"Random Forest OOS RMSE: 7887747.24351035"
+"Lasso OOS RMSE: 8651142.55329647"
+
+# Train multiple linear regression model
+linear_model <- train(Value ~ ., data = goalkeepers, method = "lm", trControl = train_control)
+
+# Get RMSE for Linear Regression
+linear_rmse <- linear_model$results$RMSE
+print(paste("Linear Regression OOS RMSE:", mean(linear_rmse)))
+
+# Train Random Forest model
+rf_model <- train(Value ~ ., data = goalkeepers, method = "rf", trControl = train_control)
+
+# Get RMSE for Random Forest
+rf_rmse <- rf_model$results$RMSE
+print(paste("Random Forest OOS RMSE:", mean(rf_rmse)))
+
+# Prepare data for glmnet (Lasso)
+x <- model.matrix(Value ~ ., data = goalkeepers)[, -1]
+y <- goalkeepers$Value
+
+# Define Lasso model with cross-validation
+lasso_model <- cv.glmnet(x, y, alpha = 1, nfolds = 10)
+
+# Best lambda
+best_lambda <- lasso_model$lambda.min
+
+# Train final Lasso model with best lambda
+lasso_final <- glmnet(x, y, alpha = 1, lambda = best_lambda)
+
+# Predict with Lasso model
+lasso_predictions <- predict(lasso_final, newx = x)
+
+# Calculate RMSE for Lasso model
+lasso_rmse <- sqrt(mean((y - lasso_predictions)^2))
+print(paste("Lasso OOS RMSE:", lasso_rmse))
+
+# Extract the coefficients
+lasso_coefs <- coef(lasso_final)
+
+# Convert to a data frame for easier viewing
+lasso_coefs_df <- data.frame(
+  Variable = rownames(as.matrix(lasso_coefs)),
+  Coefficient = as.vector(lasso_coefs)
+)
+
+# Sort by descending order of coefficients
+sorted_lasso_coefs_df <- lasso_coefs_df[order(-abs(lasso_coefs_df$Coefficient)), ]
+
+print(sorted_lasso_coefs_df)
+
+MU_gk <- goalkeepers %>% filter(`ClubManchester.United` == 1) %>% select (-c(Value))
+MU_gk2 <- player_data %>% filter(Position == 'Goalkeeper') %>% filter(Club == 'Manchester United')
+MU_gk_pred <- predict(lasso_final, newx = as.matrix(MU_gk))
+MU_gk_pred
+
+
+#goalkeeper
+"Linear Regression OOS RMSE: 7374993451.66063"
+"Random Forest OOS RMSE: 8497893.31339501"
+"Lasso OOS RMSE: 8269140.62930818"
