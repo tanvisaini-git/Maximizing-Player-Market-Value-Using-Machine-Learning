@@ -1,2 +1,3 @@
-# Maximizing-Player-Market-Value-Using-Machine-Learning
-Maximizing Player Market Value and Club Valuation Using Machine Learning - A Strategy for Selling Clubs
+This project leverages machine learning to help selling football clubs like Ajax and Brighton optimize player development and maximize transfer profits. Using data from Kaggle on over 2,000 players, the project employs Linear Regression, Lasso, and Random Forest models to predict player market value. Key insights include trainable attributes that boost value for attackers, midfielders, and defenders, enabling clubs to tailor training and strategically time player sales.
+
+The tool highlights data-driven strategies for better player valuation and training focus, helping clubs like Brighton set optimal transfer fees and improve return on investment. Future improvements include incorporating additional player metrics and maintaining a balanced training approach.
