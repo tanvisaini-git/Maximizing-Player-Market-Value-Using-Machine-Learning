@@ -1,5 +1,5 @@
 # Maximizing Player Market Value and Club Valuation Using Machine Learning
-Developed as a part of the Modern Analytics class at Duke University's Business Analytics Program. It was a team project created by Liuxinhao Gao, Akshay Navada, Tanvi Saini, Mike Shu, and Nina Wu.
+Developed as a part of the Data Science for Business class at Duke University's Business Analytics Program. It was a team project created by Liuxinhao Gao, Akshay Navada, Tanvi Saini, Mike Shu, and Nina Wu.
 
 ## Overview
 This project leverages machine learning to help selling football clubs like Ajax and Brighton optimize player development and maximize transfer profits. By analyzing data from Kaggle on over 2,000 players, we developed predictive models using Linear Regression, Lasso, and Random Forest to estimate player market value.
